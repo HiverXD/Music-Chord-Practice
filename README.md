@@ -21,7 +21,10 @@ Built with plain HTML/CSS/JavaScript and ready to deploy via GitHub Pages.
 
 ## 📖 Usage
 
-1. visit [this link](https://hiverxd.github.io/Music-Chord-Practice/)
+1. visit [this link](https://hiverxd.github.io/Music-Chord-Practice/) or download index.html to you local and run it.
+2. You can set various options: number of practice times, root variation, chord type, etc.
+3. After the setting, press **start** button.
+4. After all the random codes are printed, you will be returned to the main page. Or, you can press the exit button to stop the exercise immediately.
 
 ---
 
