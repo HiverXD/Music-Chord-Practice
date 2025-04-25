@@ -170,11 +170,20 @@
 
       // 3) “Select All” 토글: 일괄 체크/이전 상태 복원
       selectAll.addEventListener('change', () => {
-        const allTypeCbs = Array.from(document.querySelectorAll('input.chordType'));
+        // 화면에 보이는(chordType이면서 부모 label이 display != 'none') 체크박스만 선택
+        const allTypeCbs = Array.from(document.querySelectorAll('input.chordType'))
+          .filter(cb => {
+            // label 요소 또는 직접 부모 엘리먼트의 스타일 확인
+            const lbl = cb.closest('label') || cb.parentElement;
+            return window.getComputedStyle(lbl).display !== 'none';
+          });
+
         if (selectAll.checked) {
+          // 현재 보이는 것들의 체크 상태 저장 후 모두 체크
           prevStates = allTypeCbs.map(cb => cb.checked);
           allTypeCbs.forEach(cb => cb.checked = true);
         } else {
+          // 해제 시 보이는 것들만 이전 상태로 복원
           allTypeCbs.forEach((cb, i) => {
             if (prevStates[i] !== undefined) {
               cb.checked = prevStates[i];
@@ -182,6 +191,7 @@
           });
         }
       });
+
 
       // 4) Start 버튼 클릭 시 코드 리스트 생성 및 순차 표시
       let intervalId = null;
