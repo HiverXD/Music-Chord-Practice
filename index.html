@@ -33,9 +33,11 @@
       grid-template-columns: repeat(4, 1fr);
       gap: 5px;
     }
-    /* 확장 옵션은 기본 숨김 */
     .extraType {
       display: none;
+    }
+    #selectAll, #enableExtra {
+      cursor: pointer;
     }
     #startBtn:disabled {
       background: #ccc;
@@ -50,16 +52,25 @@
       color: red;
       font-size: 14px;
       display: none;
-      margin-bottom: 10px;
+      margin-top: 5px;
     }
     #display {
       display: none;
       text-align: center;
+      position: relative; /* nextChord 절대위치 기준 */
     }
     #chord {
       font-size: 80px;
       color: black;
-      margin: 100px 0;
+      margin-top: 100px;
+    }
+    #nextChord {
+      margin-top: 50px;      /* 현재 코드(#chord) 아래에 약간의 간격 */
+      margin-bottom: 50px;
+      font-size: 40px;       /* 절반 크기 유지 */
+      color: #555;           /* 중간 진한 회색 */
+      display: none;
+      text-align: center;    /* 가운데 정렬 (원한다면) */
     }
   </style>
 </head>
@@ -73,8 +84,6 @@
       </label>
     </div>
 
-    <div id="error">Please Choose at least one of Root Variation</div>
-
     <fieldset>
       <legend>Number of Repetitions</legend>
       <input type="number" id="count" min="1" value="10">
@@ -85,17 +94,17 @@
       <label><input type="checkbox" class="variation" value="" checked> ♮ (natural)</label>
       <label><input type="checkbox" class="variation" value="#"> ♯ (sharp)</label>
       <label><input type="checkbox" class="variation" value="b"> ♭ (flat)</label>
+      <!-- 경고문구를 Root Variation 아래로 이동 -->
+      <div id="error">Please choose at least one Root Variation.</div>
     </fieldset>
 
     <fieldset>
       <legend>Chord Type</legend>
       <div id="chordTypeWrapper">
-        <!-- 기본 4종 -->
         <label><input type="checkbox" class="chordType" value="Maj" checked> Maj</label>
         <label><input type="checkbox" class="chordType" value="min" checked> min</label>
         <label><input type="checkbox" class="chordType" value="dim"> dim</label>
         <label><input type="checkbox" class="chordType" value="aug"> aug</label>
-        <!-- 확장 8종 (초기에는 숨김) -->
         <label class="extraType"><input type="checkbox" class="chordType" value="7"> 7</label>
         <label class="extraType"><input type="checkbox" class="chordType" value="M7"> M7</label>
         <label class="extraType"><input type="checkbox" class="chordType" value="m7"> m7</label>
@@ -105,7 +114,6 @@
         <label class="extraType"><input type="checkbox" class="chordType" value="m7b5"> m7b5</label>
         <label class="extraType"><input type="checkbox" class="chordType" value="dim7"> dim7</label>
       </div>
-      <!-- 전체 선택/해제 -->
       <label style="margin-top:10px;">
         <input type="checkbox" id="selectAll"> Select All
       </label>
@@ -116,85 +124,80 @@
       <input type="number" id="interval" step="0.1" min="0.1" max="10" value="2">
     </fieldset>
 
+    <!-- 2) Show Next 체크박스 추가 -->
+    <label style="margin-bottom:10px; display:block;">
+      <input type="checkbox" id="showNext"> Show Next
+    </label>
+
     <button id="startBtn" disabled>Start</button>
   </div>
 
   <div id="display">
     <div id="chord">Cmaj</div>
+    <!-- 다음 코드 표시용 요소 -->
+    <div id="nextChord"></div>
     <button id="exitBtn">Exit</button>
   </div>
 
   <script>
     (function() {
-      const startBtn      = document.getElementById('startBtn');
-      const exitBtn       = document.getElementById('exitBtn');
-      const errorDiv      = document.getElementById('error');
-      const variations    = Array.from(document.querySelectorAll('.variation'));
-      const enableExtra   = document.getElementById('enableExtra');
-      const selectAll     = document.getElementById('selectAll');
-      const extraLabels   = Array.from(document.querySelectorAll('.extraType'));
-      const countInput    = document.getElementById('count');
+      const startBtn    = document.getElementById('startBtn');
+      const exitBtn     = document.getElementById('exitBtn');
+      const errorDiv    = document.getElementById('error');
+      const variations  = Array.from(document.querySelectorAll('.variation'));
+      const enableExtra = document.getElementById('enableExtra');
+      const selectAll   = document.getElementById('selectAll');
+      const extraLabels = Array.from(document.querySelectorAll('.extraType'));
+      const countInput  = document.getElementById('count');
       const intervalInput = document.getElementById('interval');
-      const settingsDiv   = document.getElementById('settings');
-      const displayDiv    = document.getElementById('display');
-      const chordDiv      = document.getElementById('chord');
-      const roots         = ['C','D','E','F','G','A','B'];
+      const showNextChk = document.getElementById('showNext');
+      const settingsDiv = document.getElementById('settings');
+      const displayDiv  = document.getElementById('display');
+      const chordDiv    = document.getElementById('chord');
+      const nextDiv     = document.getElementById('nextChord');
+      const roots       = ['C','D','E','F','G','A','B'];
 
       let prevStates = [];
+      let chordList = [];
+      let intervalId = null;
 
-      // 1) Root variation 유효성 검사
+      // 1) Root Variation 유효성 검사
       variations.forEach(cb => cb.addEventListener('change', validateVariation));
       function validateVariation() {
         const ok = variations.some(cb => cb.checked);
         errorDiv.style.display = ok ? 'none' : 'block';
-        startBtn.disabled    = !ok;
+        startBtn.disabled = !ok;
       }
       validateVariation();
 
-      // 2) “Seventh & Sus” 토글: 확장 옵션 보임/숨김
+      // 2) “Seventh & Sus” 토글
       enableExtra.addEventListener('change', () => {
         if (enableExtra.checked) {
           extraLabels.forEach(lbl => lbl.style.display = 'block');
         } else {
-          // 숨기고 선택 해제
           extraLabels.forEach(lbl => {
             lbl.style.display = 'none';
             lbl.querySelector('input.chordType').checked = false;
           });
-          // 전체 선택 해제 시 이전 상태 복원 로직 방해하지 않도록 selectAll도 초기화
           selectAll.checked = false;
         }
       });
-      // 초기상태에서 확장 옵션 숨김
-      extraLabels.forEach(lbl => lbl.style.display = 'none');
 
-      // 3) “Select All” 토글: 일괄 체크/이전 상태 복원
+      // 3) “Select All” 토글
       selectAll.addEventListener('change', () => {
-        // 화면에 보이는(chordType이면서 부모 label이 display != 'none') 체크박스만 선택
         const allTypeCbs = Array.from(document.querySelectorAll('input.chordType'))
-          .filter(cb => {
-            // label 요소 또는 직접 부모 엘리먼트의 스타일 확인
-            const lbl = cb.closest('label') || cb.parentElement;
-            return window.getComputedStyle(lbl).display !== 'none';
-          });
-
+          .filter(cb => cb.closest('label') && window.getComputedStyle(cb.closest('label')).display !== 'none');
         if (selectAll.checked) {
-          // 현재 보이는 것들의 체크 상태 저장 후 모두 체크
           prevStates = allTypeCbs.map(cb => cb.checked);
           allTypeCbs.forEach(cb => cb.checked = true);
         } else {
-          // 해제 시 보이는 것들만 이전 상태로 복원
           allTypeCbs.forEach((cb, i) => {
-            if (prevStates[i] !== undefined) {
-              cb.checked = prevStates[i];
-            }
+            if (prevStates[i] !== undefined) cb.checked = prevStates[i];
           });
         }
       });
 
-
-      // 4) Start 버튼 클릭 시 코드 리스트 생성 및 순차 표시
-      let intervalId = null;
+      // 4) Start 버튼 클릭 시
       startBtn.addEventListener('click', () => {
         const n       = parseInt(countInput.value, 10);
         const iv      = parseFloat(intervalInput.value) * 1000;
@@ -203,7 +206,8 @@
           document.querySelectorAll('input.chordType')
         ).filter(cb => cb.checked).map(cb => cb.value);
 
-        const chordList = [];
+        // 랜덤 리스트 생성
+        chordList = [];
         while (chordList.length < n) {
           const root = roots[Math.floor(Math.random() * roots.length)];
           const vari = selVars[Math.floor(Math.random() * selVars.length)];
@@ -217,7 +221,7 @@
         settingsDiv.style.display = 'none';
         displayDiv.style.display  = 'block';
         let idx = 0;
-        chordDiv.textContent = chordList[idx];
+        updateDisplay(idx);
 
         intervalId = setInterval(() => {
           idx++;
@@ -225,12 +229,23 @@
             clearInterval(intervalId);
             reset();
           } else {
-            chordDiv.textContent = chordList[idx];
+            updateDisplay(idx);
           }
         }, iv);
       });
 
-      // 5) Exit 버튼 클릭 또는 완료 시 초기 화면 복원
+      // Display 및 Next 업데이트 함수
+      function updateDisplay(idx) {
+        chordDiv.textContent = chordList[idx];
+        if (showNextChk.checked && idx < chordList.length - 1) {
+          nextDiv.textContent = chordList[idx + 1];
+          nextDiv.style.display = 'block';
+        } else {
+          nextDiv.style.display = 'none';
+        }
+      }
+
+      // 5) Exit 버튼 클릭 시 초기화
       exitBtn.addEventListener('click', () => {
         if (intervalId) clearInterval(intervalId);
         reset();
@@ -238,8 +253,8 @@
       function reset() {
         displayDiv.style.display  = 'none';
         settingsDiv.style.display = 'block';
+        nextDiv.style.display     = 'none';
       }
-
     })();
   </script>
 
